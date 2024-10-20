@@ -17,7 +17,7 @@ service = Service(chrome_driver_path)
 driver = webdriver.Chrome(service=service)
 
 # Open the Chrome Web Store extension reviews page
-url = "https://chromewebstore.google.com/detail/chrome-remote-desktop/inomeogfingihgjfjlpeplalcfajhgai/reviews"
+url = "https://chromewebstore.google.com/detail/dark-theme-dark-mode-for/gjjbmfigjpgnehjioicaalopaikcnheo/reviews"
 driver.get(url)
 
 # Wait for the page to load
