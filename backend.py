@@ -1,15 +1,33 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
+import time
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-
-from transformers import pipeline
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from transformers import pipeline
+from flask_cors import CORS
+import redis
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
+CORS(app)
 
 # Summarization and sentiment pipelines
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 sentiment_analyzer = pipeline("sentiment-analysis")
+
+redis_client = redis.Redis(
+  host='redis-10992.c9.us-east-1-2.ec2.redns.redis-cloud.com',
+  port=10992,
+  password='AQhSUkd75maPURHJl7YikDalJuFTH2bk')
+
+def get_ttl_for_today():
+    now = datetime.now()
+    # Calculate the time left until midnight
+    midnight = datetime.combine(now + timedelta(days=1), datetime.min.time())
+    ttl = (midnight - now).seconds  # Time in seconds until midnight
+    return ttl
 
 # Keywords for strength/weakness detection
 bug_keywords = [
@@ -49,11 +67,27 @@ def classify_review(summary_text, sentiment):
 @app.route('/api/analyze-extension', methods=['POST'])
 def analyze_extension():
     data = request.json
-    extension_url = data['url']
+    extension_url = data['url'] + "/reviews"
+
+    cached_result = redis_client.get(extension_url)
+    if cached_result:
+        return jsonify(eval(cached_result))  # Return cached result
 
     # Step 1: Crawl the reviews using Selenium
     driver = webdriver.Chrome()  # Setup your Chrome driver
     driver.get(extension_url)
+
+    wait = WebDriverWait(driver, 10)
+
+# Click the "Load more" button to get more reviews
+    try:
+        for _ in range(5):
+            # Wait until the "Load more" button is clickable
+            load_more_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Load more')]")))
+            load_more_button.click()
+            time.sleep(2)  # Briefly wait for reviews to load after clicking
+    except Exception as e:
+        print(f"No more 'Load more' button or an error occurred: {e}")
     
     # Extract reviews with BeautifulSoup
     page_source = driver.page_source
@@ -66,7 +100,6 @@ def analyze_extension():
     
     for review in reviews:
         review_text = review.find('p', class_='fzDEpf').text
-        print(review_text)
         sentiment = sentiment_analyzer(review_text)[0]['label']
         
         classification = classify_review(review_text, sentiment)
@@ -75,8 +108,6 @@ def analyze_extension():
         elif classification == 'Weakness':
             weaknesses.append(review_text)
 
-    print("strength:", strengths)
-    print("weakness:", weaknesses)
     # Summarize strengths and weaknesses
     summarized_strengths = summarizer(" ".join(strengths), max_length=100, min_length=50, do_sample=False)[0]['summary_text']
     summarized_weaknesses = summarizer(" ".join(weaknesses), max_length=100, min_length=50, do_sample=False)[0]['summary_text']
@@ -84,12 +115,17 @@ def analyze_extension():
     driver.quit()
 
     # Step 3: Return the results
-    return jsonify({
+    result = {
         'strengths': summarized_strengths,
         'weaknesses': summarized_weaknesses,
-        'strengths_arr': strengths, 
+        'strengths_arr': strengths,
         'weaknesses_arr': weaknesses,
-    })
+    }
+    
+    # Cache the result in Redis with TTL until midnight
+    ttl = get_ttl_for_today()  # Get TTL in seconds until midnight
+    redis_client.setex(extension_url, ttl, str(result))  # Cache the result 
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(debug=True)

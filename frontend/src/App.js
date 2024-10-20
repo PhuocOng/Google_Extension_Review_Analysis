@@ -32,10 +32,13 @@ function App() {
           type="text"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="Enter Chrome Extension URL"
+          placeholder="Enter Chrome Extension URL:"
           required
         />
         <button type="submit">Analyze</button>
+        <p style={{ fontSize: '0.9em', color: '#555', margin: 0 }}>
+          Example: https://chromewebstore.google.com/detail/sapling-grammar-checker-a/pjpgohokimaldkikgejifibjdpbopfdc
+        </p>
       </form>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
