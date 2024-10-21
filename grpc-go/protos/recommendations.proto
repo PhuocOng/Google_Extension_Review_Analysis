@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package recommendations;
+option go_package = "grpc-go/protos";
+
+// The Recommendation service definition.
+service RecommendationService {
+  // Sends strengths and weaknesses and gets back recommendations.
+  rpc GetRecommendations (RecommendationRequest) returns (RecommendationResponse) {}
+}
+
+// The request message containing strengths and weaknesses.
+message RecommendationRequest {
+  string strengths = 1;
+  string weaknesses = 2;
+}
+
+// The response message containing recommendations.
+message RecommendationResponse {
+  string recommendations = 1;
+}
